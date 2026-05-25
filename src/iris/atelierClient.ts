@@ -1,8 +1,10 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
+import { wrapper } from "axios-cookiejar-support";
+import { CookieJar } from "tough-cookie";
 import type { AppConfig } from "../config/env.js";
 import type { Logger } from "../utils/logger.js";
 import { IrisError, mapUnknownError } from "./errors.js";
-import { apiVersion, docPath, ensureClassDocumentName, ensureRoutineDocumentName, normalizeBaseUrl } from "./endpoints.js";
+import { apiVersion, docPath, ensAdapterPath, ensClassesPath, ensureClassDocumentName, ensureRoutineDocumentName, normalizeBaseUrl, sysPath } from "./endpoints.js";
 
 type AtelierStatus = {
   errors?: unknown[];
@@ -59,7 +61,9 @@ export class AtelierClient {
     this.apiVersion = config.IRIS_API_VERSION;
     this.maxRetries = config.IRIS_MAX_RETRIES;
     this.logger = logger;
-    this.http = axios.create({
+    const jar = new CookieJar();
+
+    this.http = wrapper(axios.create({
       baseURL: normalizeBaseUrl(config.IRIS_BASE_URL),
       timeout: config.IRIS_REQUEST_TIMEOUT_MS,
       auth: {
@@ -68,8 +72,9 @@ export class AtelierClient {
       },
       headers: {
         Accept: "application/json"
-      }
-    });
+      },
+      jar
+    }));
   }
 
   async getNamespace(): Promise<unknown> {
@@ -112,6 +117,11 @@ export class AtelierClient {
     return this.saveDocument(docName, content);
   }
 
+  async deleteClass(className: string): Promise<void> {
+    const docName = ensureClassDocumentName(className);
+    return this.deleteDocument(docName);
+  }
+
   async compileClass(className: string): Promise<CompileResult> {
     const docName = ensureClassDocumentName(className);
     const response = await this.request<AtelierEnvelope<unknown>>({
@@ -144,6 +154,10 @@ export class AtelierClient {
 
   async saveRoutine(routineName: string, content: string): Promise<AtelierDocument> {
     return this.saveDocument(ensureRoutineDocumentName(routineName), content);
+  }
+
+  async deleteRoutine(routineName: string): Promise<void> {
+    return this.deleteDocument(ensureRoutineDocumentName(routineName));
   }
 
   async searchText(options: {
@@ -192,6 +206,62 @@ export class AtelierClient {
         "Content-Type": "application/json"
       },
       data: [documentName]
+    });
+    return this.unwrapContent(response);
+  }
+
+  async getDocumentsBulk(docNames: string[]): Promise<AtelierDocument[]> {
+    const response = await this.request<AtelierEnvelope<AtelierContent<AtelierDocument[]>>>({
+      method: "POST",
+      url: apiVersion(this.apiVersion, this.namespace, "/docs"),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      data: docNames
+    });
+    return this.unwrapContent(response);
+  }
+
+  async runQuery(query: string, parameters?: unknown[]): Promise<unknown> {
+    const response = await this.request<AtelierEnvelope<AtelierContent<unknown>>>({
+      method: "POST",
+      url: apiVersion(this.apiVersion, this.namespace, "/action/query"),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      data: { query, parameters: parameters ?? [] }
+    });
+    return this.unwrapContent(response);
+  }
+
+  async getSystemJobs(): Promise<unknown> {
+    const response = await this.request<AtelierEnvelope<AtelierContent<unknown>>>({
+      method: "GET",
+      url: sysPath(this.apiVersion, "/jobs")
+    });
+    return this.unwrapContent(response);
+  }
+
+  async getCSPApps(ns?: string): Promise<unknown> {
+    const response = await this.request<AtelierEnvelope<AtelierContent<unknown>>>({
+      method: "GET",
+      url: sysPath(this.apiVersion, ns ? `/cspapps/${encodeURIComponent(ns)}` : "/cspapps")
+    });
+    return this.unwrapContent(response);
+  }
+
+  async getEnsClasses(type: string): Promise<unknown> {
+    const response = await this.request<AtelierEnvelope<AtelierContent<unknown>>>({
+      method: "GET",
+      url: apiVersion(this.apiVersion, this.namespace, ensClassesPath(type))
+    });
+    return this.unwrapContent(response);
+  }
+
+  async getEnsAdapter(name: string): Promise<unknown> {
+    const response = await this.request<AtelierEnvelope<AtelierContent<unknown>>>({
+      method: "GET",
+      url: apiVersion(this.apiVersion, this.namespace, ensAdapterPath(name))
     });
     return this.unwrapContent(response);
   }
@@ -256,6 +326,14 @@ export class AtelierClient {
       }
     });
     return this.unwrapDocument(response);
+  }
+
+  private async deleteDocument(docName: string): Promise<void> {
+    const response = await this.request<AtelierEnvelope<unknown>>({
+      method: "DELETE",
+      url: apiVersion(this.apiVersion, this.namespace, docPath(docName))
+    });
+    this.assertEnvelopeOk(response);
   }
 
   private unwrapContent<T>(envelope: AtelierEnvelope<AtelierContent<T>>): T {

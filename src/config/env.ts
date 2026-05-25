@@ -13,7 +13,8 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().default("info"),
   MCP_SERVER_NAME: z.string().min(1).default("iris-mcp-server"),
   MCP_SERVER_VERSION: z.string().min(1).default("1.0.0"),
-  MAX_SOURCE_PAYLOAD_BYTES: z.coerce.number().int().positive().default(1024 * 1024)
+  MAX_SOURCE_PAYLOAD_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
+  IRIS_LOCAL_WORKSPACE: z.string().min(1).default("./workspace")
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

@@ -1,7 +1,7 @@
 import type { AppConfig } from "../config/env.js";
 import type { AtelierClient } from "../iris/atelierClient.js";
 import { IrisError, mapUnknownError } from "../iris/errors.js";
-import { getRoutineSchema, saveRoutineSchema } from "../schemas/documents.js";
+import { deleteRoutineSchema, getRoutineSchema, saveRoutineSchema } from "../schemas/documents.js";
 import { asMcpText, fail, ok } from "../utils/responses.js";
 
 function asInputObject(input: unknown): Record<string, unknown> {
@@ -41,6 +41,17 @@ export function createRoutineToolHandlers(client: AtelierClient, config: AppConf
         validatePayloadSize(content, config.MAX_SOURCE_PAYLOAD_BYTES);
         const doc = await client.saveRoutine(routineName, content);
         return asMcpText(ok({ routineName, document: doc }));
+      } catch (error) {
+        return mcpError(error);
+      }
+    },
+
+    async deleteRoutine(input: unknown) {
+      try {
+        const values = asInputObject(input);
+        const routineName = deleteRoutineSchema.routineName.parse(values.routineName);
+        await client.deleteRoutine(routineName);
+        return asMcpText(ok({ routineName, deleted: true }));
       } catch (error) {
         return mcpError(error);
       }

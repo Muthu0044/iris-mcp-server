@@ -9,6 +9,7 @@
     "start": "node build/index.js",
     "start:stdio": "node build/index.js --stdio",
     "dev": "tsx src/index.ts",
+    "watch": "tsx src/watcher.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run"
@@ -16,15 +17,19 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
     "axios": "^1.7.9",
+    "axios-cookiejar-support": "^7.0.0",
+    "chokidar": "^5.0.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "pino": "^9.6.0",
+    "tough-cookie": "^6.0.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.5",
+    "@types/tough-cookie": "^4.0.5",
     "eslint": "^9.17.0",
     "globals": "^17.6.0",
     "prettier": "^3.4.2",

@@ -31,3 +31,15 @@ export function apiVersion(version: string, namespace: string, path = ""): strin
 export function docPath(docName: string): string {
   return `/doc/${encodePathPart(docName)}`;
 }
+
+export function sysPath(version: string, path = ""): string {
+  return `${version}/%25SYS${path}`;
+}
+
+export function ensClassesPath(type: string): string {
+  return `/ens/classes/${encodePathPart(type)}`;
+}
+
+export function ensAdapterPath(name: string): string {
+  return `/ens/adapter/${encodePathPart(name)}`;
+}

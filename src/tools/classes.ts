@@ -1,6 +1,6 @@
 import type { AtelierClient } from "../iris/atelierClient.js";
 import { IrisError, mapUnknownError } from "../iris/errors.js";
-import { compileClassSchema, getClassSchema, isProtectedClassName, listClassesSchema, saveClassSchema } from "../schemas/documents.js";
+import { compileClassSchema, deleteClassSchema, getClassSchema, isProtectedClassName, listClassesSchema, saveClassSchema } from "../schemas/documents.js";
 import { asMcpText, fail, ok } from "../utils/responses.js";
 import type { AppConfig } from "../config/env.js";
 
@@ -72,6 +72,18 @@ export function createClassToolHandlers(client: AtelierClient, config: AppConfig
         const className = compileClassSchema.className.parse(values.className);
         const result = await client.compileClass(className);
         return asMcpText(ok({ className, ...result }));
+      } catch (error) {
+        return mcpError(error);
+      }
+    },
+
+    async deleteClass(input: unknown) {
+      try {
+        const values = asInputObject(input);
+        const className = deleteClassSchema.className.parse(values.className);
+        assertWritableClass(className);
+        await client.deleteClass(className);
+        return asMcpText(ok({ className, deleted: true }));
       } catch (error) {
         return mcpError(error);
       }
