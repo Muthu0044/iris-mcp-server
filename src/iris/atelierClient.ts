@@ -1,10 +1,34 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
-import { wrapper } from "axios-cookiejar-support";
-import { CookieJar } from "tough-cookie";
+import http from "http";
+import https from "https";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import type { AppConfig } from "../config/env.js";
 import type { Logger } from "../utils/logger.js";
 import { IrisError, mapUnknownError } from "./errors.js";
 import { apiVersion, docPath, ensAdapterPath, ensClassesPath, ensureClassDocumentName, ensureRoutineDocumentName, normalizeBaseUrl, sysPath } from "./endpoints.js";
+
+const COOKIE_FILE = process.env.MCP_COOKIE_FILE_PATH || path.join(os.tmpdir(), "iris-mcp-session-cookies.json");
+
+function loadCookieString(): string {
+  if (fs.existsSync(COOKIE_FILE)) {
+    try {
+      return fs.readFileSync(COOKIE_FILE, "utf-8").trim();
+    } catch (e) {
+      // Ignore
+    }
+  }
+  return "";
+}
+
+function saveCookieString(cookieStr: string) {
+  try {
+    fs.writeFileSync(COOKIE_FILE, cookieStr, "utf-8");
+  } catch (e) {
+    // Ignore
+  }
+}
 
 type AtelierStatus = {
   errors?: unknown[];
@@ -55,15 +79,19 @@ export class AtelierClient {
   private readonly apiVersion: string;
   private readonly maxRetries: number;
   private readonly logger: Logger;
+  private currentCookies: string;
 
   constructor(config: AppConfig, logger: Logger) {
     this.namespace = config.IRIS_NAMESPACE;
     this.apiVersion = config.IRIS_API_VERSION;
     this.maxRetries = config.IRIS_MAX_RETRIES;
     this.logger = logger;
-    const jar = new CookieJar();
+    this.currentCookies = loadCookieString();
 
-    this.http = wrapper(axios.create({
+    const httpAgent = new http.Agent({ keepAlive: true });
+    const httpsAgent = new https.Agent({ keepAlive: true });
+
+    this.http = axios.create({
       baseURL: normalizeBaseUrl(config.IRIS_BASE_URL),
       timeout: config.IRIS_REQUEST_TIMEOUT_MS,
       auth: {
@@ -71,10 +99,64 @@ export class AtelierClient {
         password: config.IRIS_PASSWORD
       },
       headers: {
-        Accept: "application/json"
+        Accept: "application/json",
+        ...(this.currentCookies ? { Cookie: this.currentCookies } : {})
       },
-      jar
-    }));
+      httpAgent,
+      httpsAgent
+    });
+
+    // Intercept responses to extract and persist cookies
+    this.http.interceptors.response.use(
+      (response) => {
+        this.extractAndSaveCookies(response.headers["set-cookie"]);
+        return response;
+      },
+      (error) => {
+        if (error.response) {
+          this.extractAndSaveCookies(error.response.headers["set-cookie"]);
+        }
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  private extractAndSaveCookies(setCookieHeaders: string[] | undefined): void {
+    if (!setCookieHeaders || !Array.isArray(setCookieHeaders)) {
+      return;
+    }
+
+    const cookies = setCookieHeaders.map((c) => c.split(";")[0].trim());
+    const cookieMap = new Map<string, string>();
+
+    // Parse existing cookies
+    if (this.currentCookies) {
+      this.currentCookies.split(";").forEach((c) => {
+        const parts = c.split("=");
+        if (parts.length >= 2) {
+          cookieMap.set(parts[0].trim(), parts[1].trim());
+        }
+      });
+    }
+
+    // Parse and merge new cookies
+    cookies.forEach((c) => {
+      const parts = c.split("=");
+      if (parts.length >= 2) {
+        cookieMap.set(parts[0].trim(), parts[1].trim());
+      }
+    });
+
+    // Reconstruct cookie string
+    const newCookieString = Array.from(cookieMap.entries())
+      .map(([k, v]) => `${k}=${v}`)
+      .join("; ");
+
+    if (newCookieString !== this.currentCookies) {
+      this.currentCookies = newCookieString;
+      this.http.defaults.headers.common["Cookie"] = newCookieString;
+      saveCookieString(newCookieString);
+    }
   }
 
   async getNamespace(): Promise<unknown> {

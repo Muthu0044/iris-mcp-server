@@ -50,7 +50,7 @@ graph TD
 - **Advanced Security & Protection**:
   - **Shielded System Files**: Rejects mutations to critical system files like `%SYS.*`, `%Dictionary.*`, and other namespace-level protected classes.
   - **Configured Namespace Jail**: Isolates the MCP server strictly to the namespace configured in your environment variable.
-  - **License Optimized**: Utilizes Node.js HTTP Keep-Alive alongside a `tough-cookie` CookieJar to preserve IRIS sessions, dramatically reducing license exhaustion.
+  - **License Optimized**: Utilizes persistent file-based session cookies and connection pooling (`keepAlive: true`) to merge active sessions and reduce concurrent license usage down to exactly 1.
 - **Dual Transport Mechanisms**:
   - **Streamable HTTP Mode**: Designed for remote deployments and multiple client integrations.
   - **STDIO Mode**: Designed for local development and direct desktop tool integrations (e.g., Claude Desktop).
@@ -181,7 +181,7 @@ The server implements strict guardrails to protect your database server from acc
 1. **Protected System Files Block**: The server parses incoming names in `save_class` and `save_routine`. If the target starts with `%SYS.`, `%Dictionary.`, or matches `%SYS`, the server immediately throws a `PROTECTED_CLASS` error and rejects the write.
 2. **Namespace Isolation**: All operations are routed directly to the isolated namespace configured in `IRIS_NAMESPACE`. The server does not support cross-namespace dynamic queries, ensuring security boundaries.
 3. **Payload Sanitization**: Payloads are checked prior to dispatching to the IRIS database. If code content exceeds the configured `MAX_SOURCE_PAYLOAD_BYTES` limit, execution is safely halted.
-4. **License Pooling**: Uses internal Cookie Jars and HTTP Keep-Alive to maintain a single session footprint against your database, rather than exhausting your available user licenses.
+4. **License Pooling**: Uses custom persistent session cookies and HTTP Keep-Alive connection pooling to maintain a single session footprint against your database, rather than exhausting your available user licenses.
 
 ---
 
